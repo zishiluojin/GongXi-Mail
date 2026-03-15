@@ -361,12 +361,13 @@ const EmailsPage: React.FC = () => {
         );
         if (result) {
             setMailList(result.messages || []);
+            fetchData();
             if (showSuccessToast) {
                 message.success('刷新成功');
             }
         }
         setMailLoading(false);
-    }, []);
+    }, [fetchData]);
 
     const handleViewMails = useCallback(async (record: EmailAccount, mailbox: string) => {
         setCurrentEmail(record.email);
@@ -388,6 +389,7 @@ const EmailsPage: React.FC = () => {
             if (res.code === 200) {
                 message.success(`已清空 ${res.data?.deletedCount || 0} 封邮件`);
                 setMailList([]);
+                fetchData();
             } else {
                 message.error(res.message || '清空失败');
             }

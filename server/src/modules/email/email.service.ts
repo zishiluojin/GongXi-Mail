@@ -207,6 +207,18 @@ export const emailService = {
     },
 
     /**
+     * 仅更新时间，不改动邮箱状态
+     */
+    async touchLastCheckAt(id: number) {
+        await prisma.emailAccount.update({
+            where: { id },
+            data: {
+                lastCheckAt: new Date(),
+            },
+        });
+    },
+
+    /**
      * 删除邮箱账户
      */
     async delete(id: number) {

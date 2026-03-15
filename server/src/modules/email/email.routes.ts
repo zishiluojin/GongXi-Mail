@@ -142,6 +142,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
         };
 
         const mails = await mailService.getEmails(credentials, { mailbox: mailbox || 'INBOX' });
+        await emailService.touchLastCheckAt(emailData.id);
         return { success: true, data: mails };
     });
 
@@ -162,6 +163,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
         };
 
         const result = await mailService.processMailbox(credentials, { mailbox: mailbox || 'INBOX' });
+        await emailService.touchLastCheckAt(emailData.id);
         request.log.info({
             systemEvent: true,
             action: 'email.clear_mailbox',
