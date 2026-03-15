@@ -26,7 +26,7 @@ const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
             actorUsername: request.user?.username ?? null,
             apiKeyId: apiKey.id,
             name: apiKey.name,
-        }, 'Created API key');
+        }, '新增 API Key');
         return { success: true, data: apiKey };
     });
 
@@ -58,7 +58,7 @@ const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
             actorUsername: request.user?.username ?? null,
             apiKeyId: parseInt(id),
             group: group || null,
-        }, 'Reset API key email pool');
+        }, '重置 API Key 邮箱池');
         return { success: true, data: { message: '邮箱池已重置' } };
     });
 
@@ -75,7 +75,7 @@ const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
             apiKeyId: apiKey.id,
             name: apiKey.name,
             status: apiKey.status,
-        }, 'Updated API key');
+        }, '修改 API Key');
         return { success: true, data: apiKey };
     });
 
@@ -89,7 +89,7 @@ const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
             actorId: request.user?.id ?? null,
             actorUsername: request.user?.username ?? null,
             apiKeyId: parseInt(id),
-        }, 'Deleted API key');
+        }, '删除 API Key');
         return { success: true, data: { message: 'API Key deleted' } };
     });
 
@@ -118,7 +118,7 @@ const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
             groupId: input.groupId ?? null,
             emailIds: input.emailIds,
             count: result.count,
-        }, 'Updated API key pool email usage');
+        }, '更新 API Key 邮箱池使用状态');
         return { success: true, data: result };
     });
 };

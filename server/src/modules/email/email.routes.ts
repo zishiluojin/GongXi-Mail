@@ -37,7 +37,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
             actorUsername: request.user?.username ?? null,
             emailId: email.id,
             email: email.email,
-        }, 'Created email account');
+        }, '新增邮箱');
         return { success: true, data: email };
     });
 
@@ -54,7 +54,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
             emailId: email.id,
             email: email.email,
             status: email.status,
-        }, 'Updated email account');
+        }, '修改邮箱');
         return { success: true, data: email };
     });
 
@@ -68,7 +68,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
             actorId: request.user?.id ?? null,
             actorUsername: request.user?.username ?? null,
             emailId: parseInt(id),
-        }, 'Deleted email account');
+        }, '删除邮箱');
         return { success: true, data: { message: 'Email account deleted' } };
     });
 
@@ -83,7 +83,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
             actorUsername: request.user?.username ?? null,
             emailIds: ids,
             deletedCount: result.deleted,
-        }, 'Batch deleted email accounts');
+        }, '批量删除邮箱');
         return { success: true, data: result };
     });
 
@@ -100,7 +100,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
             success: result.success,
             failed: result.failed,
             errorCount: result.errors.length,
-        }, 'Imported email accounts');
+        }, '批量导入邮箱');
         return { success: true, data: result };
     });
 
@@ -121,7 +121,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
             actorUsername: request.user?.username ?? null,
             groupId: query.groupId ?? null,
             emailCount: idArray?.length ?? null,
-        }, 'Exported email accounts');
+        }, '导出邮箱');
         return { success: true, data: { content } };
     });
 
@@ -170,7 +170,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
             emailId: emailData.id,
             email: emailData.email,
             mailbox: mailbox || 'INBOX',
-        }, 'Cleared mailbox');
+        }, '清空邮箱');
         return { success: true, data: result };
     });
 
@@ -193,7 +193,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
             groupId: body?.groupId ?? null,
             requestedById: request.user?.id ?? null,
             requestedByUsername: request.user?.username ?? null,
-        }, 'Manual token refresh requested');
+        }, '手动触发批量刷新 Token');
 
         // 异步执行，不阻塞请求
         void tokenRefreshService.refreshAll({
@@ -212,7 +212,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
                 groupId: body?.groupId ?? null,
                 requestedById: request.user?.id ?? null,
                 requestedByUsername: request.user?.username ?? null,
-            }, 'Manual token refresh failed');
+            }, '手动批量刷新 Token 失败');
         });
         return { success: true, data: { message: 'Token refresh started' } };
     });
@@ -234,7 +234,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
             enabled: settings.enabled,
             intervalHours: settings.intervalHours,
             concurrency: settings.concurrency,
-        }, 'Updated token refresh settings');
+        }, '修改 Token 自动刷新设置');
 
         return { success: true, data: settings };
     });
@@ -253,7 +253,7 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
             emailId: result.emailId,
             email: result.email || null,
             success: result.success,
-        }, result.success ? 'Refreshed single email token' : 'Single email token refresh failed');
+        }, result.success ? '手动刷新单个邮箱 Token 成功' : '手动刷新单个邮箱 Token 失败');
         return { success: true, data: result };
     });
 

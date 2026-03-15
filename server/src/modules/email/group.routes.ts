@@ -30,7 +30,7 @@ const groupRoutes: FastifyPluginAsync = async (fastify) => {
             actorUsername: request.user?.username ?? null,
             groupId: group.id,
             name: group.name,
-        }, 'Created email group');
+        }, '新增邮箱分组');
         return { success: true, data: group };
     });
 
@@ -46,7 +46,7 @@ const groupRoutes: FastifyPluginAsync = async (fastify) => {
             actorUsername: request.user?.username ?? null,
             groupId: group.id,
             name: group.name,
-        }, 'Updated email group');
+        }, '修改邮箱分组');
         return { success: true, data: group };
     });
 
@@ -60,7 +60,7 @@ const groupRoutes: FastifyPluginAsync = async (fastify) => {
             actorId: request.user?.id ?? null,
             actorUsername: request.user?.username ?? null,
             groupId: id,
-        }, 'Deleted email group');
+        }, '删除邮箱分组');
         return { success: true, data: result };
     });
 
@@ -77,7 +77,7 @@ const groupRoutes: FastifyPluginAsync = async (fastify) => {
             groupId: id,
             emailIds: input.emailIds,
             updatedCount: result.count,
-        }, 'Assigned emails to group');
+        }, '分配邮箱到分组');
         return { success: true, data: result };
     });
 
@@ -94,7 +94,7 @@ const groupRoutes: FastifyPluginAsync = async (fastify) => {
             groupId: id,
             emailIds: input.emailIds,
             updatedCount: result.count,
-        }, 'Removed emails from group');
+        }, '从分组移除邮箱');
         return { success: true, data: result };
     });
 };

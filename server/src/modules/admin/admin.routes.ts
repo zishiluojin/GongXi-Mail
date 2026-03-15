@@ -33,7 +33,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
             targetAdminId: admin.id,
             targetUsername: admin.username,
             role: admin.role,
-        }, 'Created admin account');
+        }, '新增管理员');
         return { success: true, data: admin };
     });
 
@@ -51,7 +51,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
             targetUsername: admin.username,
             role: admin.role,
             status: admin.status,
-        }, 'Updated admin account');
+        }, '修改管理员');
         return { success: true, data: admin };
     });
 
@@ -65,7 +65,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
             actorId: request.user?.id ?? null,
             actorUsername: request.user?.username ?? null,
             targetAdminId: parseInt(id),
-        }, 'Deleted admin account');
+        }, '删除管理员');
         return { success: true, data: { message: 'Admin deleted' } };
     });
 };

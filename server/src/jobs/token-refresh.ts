@@ -75,13 +75,13 @@ async function scheduleFromConfig(reason: 'startup' | 'update' | 'completed' | '
     const state = await tokenRefreshService.getTokenRefreshScheduleState();
 
     if (!state.enabled) {
-        logger.info({ systemEvent: true, action: 'token_refresh.auto_disabled', trigger: 'AUTO', reason }, 'Automatic token refresh scheduler is disabled');
+        logger.info({ systemEvent: true, action: 'token_refresh.auto_disabled', trigger: 'AUTO', reason }, '自动刷新调度器已停用');
         await persistAndSchedule(null);
         return;
     }
 
     if (reason === 'update' && tokenRefreshService.isAutoRunInProgress()) {
-        logger.info({ systemEvent: true, action: 'token_refresh.auto_update_deferred', trigger: 'AUTO', reason }, 'Automatic token refresh schedule update deferred until current auto run completes');
+        logger.info({ systemEvent: true, action: 'token_refresh.auto_update_deferred', trigger: 'AUTO', reason }, '自动刷新配置更新已延后，等待当前自动任务完成');
         return;
     }
 
@@ -118,7 +118,7 @@ async function scheduleFromConfig(reason: 'startup' | 'update' | 'completed' | '
         intervalHours: state.intervalHours,
         concurrency: state.concurrency,
         nextRunAt: targetRunAt.toISOString(),
-    }, 'Automatic token refresh scheduled');
+    }, '已安排下一次自动刷新');
 
     await persistAndSchedule(targetRunAt);
 }
@@ -132,7 +132,7 @@ async function executeScheduledRun(): Promise<void> {
     try {
         const state = await tokenRefreshService.getTokenRefreshScheduleState();
         if (!state.enabled) {
-            logger.info({ systemEvent: true, action: 'token_refresh.auto_skip_disabled', trigger: 'AUTO' }, 'Skipping automatic token refresh because the scheduler is disabled');
+            logger.info({ systemEvent: true, action: 'token_refresh.auto_skip_disabled', trigger: 'AUTO' }, '自动刷新已跳过，因为调度器处于停用状态');
             return;
         }
 
@@ -146,7 +146,7 @@ async function executeScheduledRun(): Promise<void> {
                 blockedByTrigger: activeRun?.trigger ?? 'UNKNOWN',
                 blockedGroupId: activeRun?.groupId ?? null,
                 blockedByUsername: activeRun?.requestedByUsername ?? null,
-            }, 'Delaying automatic token refresh because another refresh run is active');
+            }, '自动刷新已延后，因为当前还有其他刷新任务在运行');
             return;
         }
 
@@ -156,7 +156,7 @@ async function executeScheduledRun(): Promise<void> {
         });
     } catch (err) {
         nextReason = 'retry';
-        logger.error({ err, systemEvent: true, action: 'token_refresh.auto_failed', trigger: 'AUTO' }, 'Automatic token refresh job failed');
+        logger.error({ err, systemEvent: true, action: 'token_refresh.auto_failed', trigger: 'AUTO' }, '自动刷新任务执行失败');
     } finally {
         if (!stopped) {
             await scheduleFromConfig(nextReason);

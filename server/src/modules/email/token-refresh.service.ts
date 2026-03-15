@@ -343,7 +343,7 @@ export const tokenRefreshService = {
         try {
             currentRefreshToken = decrypt(account.refreshToken);
         } catch {
-            logger.error({ systemEvent: true, action: 'token_refresh.single_failed', emailId, email: account.email }, 'Failed to decrypt refresh token');
+            logger.error({ emailId, email: account.email }, '解密 refresh token 失败');
             await prisma.emailAccount.update({
                 where: { id: emailId },
                 data: getFailureUpdateData(account.errorMessage, 'Failed to decrypt refresh token'),
@@ -377,7 +377,7 @@ export const tokenRefreshService = {
                     errorMsg = errorText.substring(0, 200);
                 }
 
-                logger.warn({ systemEvent: true, action: 'token_refresh.single_failed', email: account.email, emailId, status: response.status }, `Token refresh failed: ${errorMsg}`);
+                logger.warn({ email: account.email, emailId, status: response.status }, `Token 刷新失败: ${errorMsg}`);
                 await prisma.emailAccount.update({
                     where: { id: emailId },
                     data: getFailureUpdateData(account.errorMessage, errorMsg),
@@ -389,7 +389,7 @@ export const tokenRefreshService = {
 
             if (!data.refresh_token) {
                 const msg = 'No refresh_token in response';
-                logger.warn({ systemEvent: true, action: 'token_refresh.single_failed', email: account.email, emailId }, msg);
+                logger.warn({ email: account.email, emailId }, '响应中缺少 refresh_token');
                 await prisma.emailAccount.update({
                     where: { id: emailId },
                     data: getFailureUpdateData(account.errorMessage, msg),
@@ -407,11 +407,11 @@ export const tokenRefreshService = {
                 },
             });
 
-            logger.info({ systemEvent: true, action: 'token_refresh.single_success', email: account.email, emailId }, 'Token refreshed successfully');
+            logger.info({ email: account.email, emailId }, 'Token 刷新成功');
             return { emailId, email: account.email, success: true, message: 'OK' };
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Unknown error';
-            logger.error({ err, systemEvent: true, action: 'token_refresh.single_failed', email: account.email, emailId }, 'Token refresh exception');
+            logger.error({ err, email: account.email, emailId }, 'Token 刷新异常');
             await prisma.emailAccount.update({
                 where: { id: emailId },
                 data: getFailureUpdateData(account.errorMessage, `Exception: ${message}`),
@@ -489,7 +489,7 @@ export const tokenRefreshService = {
                 requestedByUsername,
                 total: accounts.length,
                 concurrency,
-            }, 'Token refresh run started');
+            }, trigger === 'AUTO' ? '自动批量刷新 Token 开始' : '手动批量刷新 Token 开始');
 
             await runWithConcurrency(accounts, concurrency, async (account) => {
                 const result = await this.refreshSingleToken(account.id);
@@ -566,7 +566,7 @@ export const tokenRefreshService = {
                 success: batchResult.success,
                 failed: batchResult.failed,
                 durationMs: batchResult.durationMs,
-            }, 'Token refresh run completed');
+            }, trigger === 'AUTO' ? '自动批量刷新 Token 完成' : '手动批量刷新 Token 完成');
 
             return batchResult;
         } catch (err) {
@@ -578,7 +578,7 @@ export const tokenRefreshService = {
                 groupId,
                 requestedById,
                 requestedByUsername,
-            }, 'Token refresh run failed');
+            }, trigger === 'AUTO' ? '自动批量刷新 Token 失败' : '手动批量刷新 Token 失败');
             throw err;
         } finally {
             isRunning = false;

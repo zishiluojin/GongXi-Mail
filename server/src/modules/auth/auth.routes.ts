@@ -44,7 +44,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             action: 'auth.change_password',
             actorId: request.user?.id ?? null,
             actorUsername: request.user?.username ?? null,
-        }, 'Changed admin password');
+        }, '修改管理员密码');
         return { success: true, data: { message: 'Password changed' } };
     });
 
@@ -75,7 +75,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             action: 'auth.2fa_enable',
             actorId: request.user?.id ?? null,
             actorUsername: request.user?.username ?? null,
-        }, 'Enabled admin 2FA');
+        }, '启用管理员二次验证');
         return { success: true, data: result };
     });
 
@@ -90,7 +90,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             action: 'auth.2fa_disable',
             actorId: request.user?.id ?? null,
             actorUsername: request.user?.username ?? null,
-        }, 'Disabled admin 2FA');
+        }, '禁用管理员二次验证');
         return { success: true, data: result };
     });
 };
