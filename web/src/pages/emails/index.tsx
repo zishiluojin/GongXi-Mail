@@ -949,7 +949,7 @@ const EmailsPage: React.FC = () => {
                                 (value: string | number | boolean): value is EmailTableColumnKey =>
                                     EMAIL_TABLE_COLUMN_CONFIGS.some((column) => column.key === value)
                             );
-                            const ensuredKeys = nextKeys.includes('action')
+                            const ensuredKeys: EmailTableColumnKey[] = nextKeys.includes('action')
                                 ? nextKeys
                                 : [...nextKeys, 'action'];
                             setVisibleColumnKeys(ensuredKeys);
