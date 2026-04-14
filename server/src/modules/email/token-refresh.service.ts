@@ -404,8 +404,6 @@ export const tokenRefreshService = {
                 data: {
                     refreshToken: encryptedNewToken,
                     tokenRefreshedAt: new Date(),
-                    tokenRefreshFailedAt: null,
-                    tokenRefreshFailureReason: null,
                     ...getSuccessUpdateData(account.errorMessage),
                 },
             });
