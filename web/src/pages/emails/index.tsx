@@ -943,8 +943,12 @@ const EmailsPage: React.FC = () => {
                 label: (
                     <Checkbox.Group
                         value={visibleColumnKeys}
-                        onChange={(checkedValues: Array<string | number>) => {
-                            const nextKeys = checkedValues as EmailTableColumnKey[];
+                        onChange={(checkedValues: Array<string | number | boolean>) => {
+                            // 这里把 Checkbox.Group 返回值收敛为表格列联合类型，避免 string[] 无法赋给 EmailTableColumnKey[]。
+                            const nextKeys = checkedValues.filter(
+                                (value: string | number | boolean): value is EmailTableColumnKey =>
+                                    EMAIL_TABLE_COLUMN_CONFIGS.some((column) => column.key === value)
+                            );
                             const ensuredKeys = nextKeys.includes('action')
                                 ? nextKeys
                                 : [...nextKeys, 'action'];
