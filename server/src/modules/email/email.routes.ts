@@ -2,7 +2,7 @@ import { type FastifyPluginAsync } from 'fastify';
 import { emailService } from './email.service.js';
 import { mailService } from '../mail/mail.service.js';
 import { tokenRefreshService } from './token-refresh.service.js';
-import { createEmailSchema, updateEmailSchema, listEmailSchema, importEmailSchema } from './email.schema.js';
+import { createEmailSchema, updateEmailSchema, listEmailSchema, importEmailSchema, generateAliasSchema } from './email.schema.js';
 import { z } from 'zod';
 import { AppError } from '../../plugins/error.js';
 import { getTokenRefreshJobNextRunAt, refreshTokenRefreshJobSchedule } from '../../jobs/token-refresh.js';
@@ -123,6 +123,23 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
             emailCount: idArray?.length ?? null,
         }, '导出邮箱');
         return { success: true, data: { content } };
+    });
+
+    // 批量生成别名
+    fastify.post('/generate-aliases', async (request) => {
+        const input = generateAliasSchema.parse(request.body);
+        const result = await emailService.generateAliases(input);
+        request.log.info({
+            systemEvent: true,
+            action: 'email.generate_aliases',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            sourceCount: result.stats.sourceCount,
+            eligibleCount: result.stats.eligibleCount,
+            generatedCount: result.stats.generatedCount,
+            aliasCountPerEmail: result.stats.aliasCountPerEmail,
+        }, '批量生成邮箱别名');
+        return { success: true, data: result };
     });
 
     // 查看邮件 (管理员专用)

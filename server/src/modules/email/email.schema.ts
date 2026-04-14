@@ -32,7 +32,18 @@ export const importEmailSchema = z.object({
     groupId: z.coerce.number().int().positive().optional(),
 });
 
+export const generateAliasSchema = z.object({
+    ids: z.array(z.number().int().positive()).optional(),
+    groupId: z.coerce.number().int().positive().optional(),
+    status: z.enum(['ACTIVE', 'ERROR', 'DISABLED']).optional(),
+    keyword: z.string().optional(),
+    aliasCount: z.coerce.number().int().min(1).max(100).default(5),
+    prefix: z.string().min(1).max(20).default('g'),
+    separator: z.string().min(1).max(20).default('----'),
+});
+
 export type CreateEmailInput = z.infer<typeof createEmailSchema>;
 export type UpdateEmailInput = z.infer<typeof updateEmailSchema>;
 export type ListEmailInput = z.infer<typeof listEmailSchema>;
 export type ImportEmailInput = z.infer<typeof importEmailSchema>;
+export type GenerateAliasInput = z.infer<typeof generateAliasSchema>;

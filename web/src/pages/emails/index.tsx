@@ -16,6 +16,8 @@ import {
     List,
     Tabs,
     Spin,
+    InputNumber,
+    Alert,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -31,6 +33,7 @@ import {
     SyncOutlined,
     WarningOutlined,
     StopOutlined,
+    ForkOutlined,
 } from '@ant-design/icons';
 import { emailApi, groupApi } from '../../api';
 import { getErrorMessage } from '../../utils/error';
@@ -100,6 +103,18 @@ interface EmailDetailsResult extends EmailAccount {
     password?: string;
 }
 
+interface AliasGenerateResult {
+    content: string;
+    stats: {
+        sourceCount: number;
+        eligibleCount: number;
+        aliasCountPerEmail: number;
+        generatedCount: number;
+        skippedPlusAliasCount: number;
+        skippedUnsupportedDomainCount: number;
+    };
+}
+
 const EmailsPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState<EmailAccount[]>([]);
@@ -109,6 +124,7 @@ const EmailsPage: React.FC = () => {
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [modalVisible, setModalVisible] = useState(false);
     const [importModalVisible, setImportModalVisible] = useState(false);
+    const [aliasModalVisible, setAliasModalVisible] = useState(false);
     const [mailModalVisible, setMailModalVisible] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [keyword, setKeyword] = useState('');
@@ -118,6 +134,8 @@ const EmailsPage: React.FC = () => {
     const [importContent, setImportContent] = useState('');
     const [separator, setSeparator] = useState('----');
     const [importGroupId, setImportGroupId] = useState<number | undefined>(undefined);
+    const [aliasGenerating, setAliasGenerating] = useState(false);
+    const [aliasResult, setAliasResult] = useState<AliasGenerateResult | null>(null);
     const [mailList, setMailList] = useState<MailItem[]>([]);
     const [mailLoading, setMailLoading] = useState(false);
     const [currentEmail, setCurrentEmail] = useState<string>('');
@@ -128,6 +146,7 @@ const EmailsPage: React.FC = () => {
     const [emailDetailSubject, setEmailDetailSubject] = useState<string>('');
     const [emailEditLoading, setEmailEditLoading] = useState(false);
     const [form] = Form.useForm();
+    const [aliasForm] = Form.useForm();
 
     // Group-related state
     const [groups, setGroups] = useState<EmailGroup[]>([]);
@@ -356,6 +375,60 @@ const EmailsPage: React.FC = () => {
         } catch (err: unknown) {
             message.error(getErrorMessage(err, '导入失败'));
         }
+    };
+
+    const handleOpenAliasModal = () => {
+        setAliasResult(null);
+        aliasForm.setFieldsValue({
+            aliasCount: 5,
+            prefix: 'g',
+            separator,
+        });
+        setAliasModalVisible(true);
+    };
+
+    const handleGenerateAliases = async () => {
+        try {
+            const values = await aliasForm.validateFields();
+            setAliasGenerating(true);
+
+            const result = await emailApi.generateAliases({
+                ids: selectedRowKeys.length > 0 ? (selectedRowKeys as number[]) : undefined,
+                groupId: selectedRowKeys.length > 0 ? undefined : filterGroupId,
+                status: selectedRowKeys.length > 0 ? undefined : filterStatus,
+                keyword: selectedRowKeys.length > 0 ? undefined : debouncedKeyword || undefined,
+                aliasCount: Number(values.aliasCount),
+                prefix: String(values.prefix),
+                separator: String(values.separator || separator),
+            });
+
+            if (result.code !== 200) {
+                message.error(result.message || '生成失败');
+                return;
+            }
+
+            setAliasResult(result.data);
+            message.success(`已生成 ${result.data.stats.generatedCount} 条别名`);
+        } catch (err: unknown) {
+            message.error(getErrorMessage(err, '生成失败'));
+        } finally {
+            setAliasGenerating(false);
+        }
+    };
+
+    const handleDownloadAliasResult = () => {
+        if (!aliasResult?.content) {
+            message.warning('暂无可下载的别名结果');
+            return;
+        }
+
+        const blob = new Blob([aliasResult.content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = 'email_aliases.txt';
+        anchor.click();
+        URL.revokeObjectURL(url);
     };
 
     const handleExport = async () => {
@@ -908,6 +981,9 @@ const EmailsPage: React.FC = () => {
                                         <Button icon={<DownloadOutlined />} onClick={handleExport}>
                                             导出
                                         </Button>
+                                        <Button icon={<ForkOutlined />} onClick={handleOpenAliasModal}>
+                                            生成别名
+                                        </Button>
                                         <Popconfirm
                                             title="确定要一键删除当前列表中的所有异常账号吗？"
                                             onConfirm={handleDeleteErrorAccounts}
@@ -1083,6 +1159,73 @@ const EmailsPage: React.FC = () => {
                         onChange={(e) => setImportContent(e.target.value)}
                         placeholder={`example@outlook.com${separator}client_id${separator}refresh_token`}
                     />
+                </Space>
+            </Modal>
+
+            {/* 批量别名生成 Modal */}
+            <Modal
+                title="批量生成 Hotmail/Outlook 别名"
+                open={aliasModalVisible}
+                onOk={handleGenerateAliases}
+                confirmLoading={aliasGenerating}
+                onCancel={() => setAliasModalVisible(false)}
+                destroyOnClose
+                width={760}
+                footer={[
+                    <Button key="download" icon={<DownloadOutlined />} onClick={handleDownloadAliasResult} disabled={!aliasResult?.content}>
+                        下载结果
+                    </Button>,
+                    <Button key="cancel" onClick={() => setAliasModalVisible(false)}>
+                        关闭
+                    </Button>,
+                    <Button key="submit" type="primary" loading={aliasGenerating} onClick={handleGenerateAliases}>
+                        生成别名
+                    </Button>,
+                ]}
+            >
+                <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                    <Alert
+                        type="info"
+                        showIcon
+                        message="生成规则说明"
+                        description={`仅支持 Hotmail / Outlook / Live / MSN / WindowsLive 域名；仅生成别名行，不包含原邮箱；当前${selectedRowKeys.length > 0 ? `基于已选择的 ${selectedRowKeys.length} 个邮箱生成` : '基于当前筛选条件生成'}。`}
+                    />
+                    <Form form={aliasForm} layout="vertical">
+                        <Space align="start" wrap>
+                            <Form.Item
+                                name="aliasCount"
+                                label="每个邮箱生成数量"
+                                rules={[{ required: true, message: '请输入生成数量' }]}
+                            >
+                                <InputNumber min={1} max={100} precision={0} style={{ width: 160 }} />
+                            </Form.Item>
+                            <Form.Item
+                                name="prefix"
+                                label="别名前缀"
+                                rules={[{ required: true, message: '请输入前缀' }]}
+                            >
+                                <Input placeholder="例如 g" style={{ width: 160 }} />
+                            </Form.Item>
+                            <Form.Item
+                                name="separator"
+                                label="导出分隔符"
+                                rules={[{ required: true, message: '请输入分隔符' }]}
+                            >
+                                <Input placeholder="----" style={{ width: 160 }} />
+                            </Form.Item>
+                        </Space>
+                    </Form>
+                    {aliasResult && (
+                        <>
+                            <Alert
+                                type="success"
+                                showIcon
+                                message={`已生成 ${aliasResult.stats.generatedCount} 条别名`}
+                                description={`源邮箱 ${aliasResult.stats.sourceCount} 个，可生成邮箱 ${aliasResult.stats.eligibleCount} 个，单邮箱 ${aliasResult.stats.aliasCountPerEmail} 条，已跳过已有 plus 别名 ${aliasResult.stats.skippedPlusAliasCount} 个，已跳过非支持域名 ${aliasResult.stats.skippedUnsupportedDomainCount} 个。`}
+                            />
+                            <TextArea rows={12} value={aliasResult.content} readOnly />
+                        </>
+                    )}
                 </Space>
             </Modal>
 

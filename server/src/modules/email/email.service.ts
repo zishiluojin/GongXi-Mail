@@ -2,7 +2,31 @@ import prisma from '../../lib/prisma.js';
 import { encrypt, decrypt } from '../../lib/crypto.js';
 import { AppError } from '../../plugins/error.js';
 import type { Prisma } from '@prisma/client';
-import type { CreateEmailInput, UpdateEmailInput, ListEmailInput, ImportEmailInput } from './email.schema.js';
+import type { CreateEmailInput, UpdateEmailInput, ListEmailInput, ImportEmailInput, GenerateAliasInput } from './email.schema.js';
+
+const HOTMAIL_ALIAS_DOMAINS = new Set([
+    'hotmail.com', 'outlook.com', 'live.com',
+    'hotmail.co.uk', 'hotmail.fr', 'hotmail.de',
+    'hotmail.it', 'hotmail.es', 'hotmail.co.jp',
+    'outlook.co.uk', 'outlook.fr', 'outlook.de',
+    'msn.com', 'windowslive.com',
+]);
+
+function isSupportedAliasEmail(email: string): boolean {
+    const normalizedEmail = email.trim().toLowerCase();
+    const atIndex = normalizedEmail.lastIndexOf('@');
+    if (atIndex <= 0) {
+        return false;
+    }
+
+    const domain = normalizedEmail.slice(atIndex + 1);
+    return HOTMAIL_ALIAS_DOMAINS.has(domain);
+}
+
+function hasPlusAlias(email: string): boolean {
+    const localPart = email.trim().split('@', 1)[0] || '';
+    return localPart.includes('+');
+}
 
 export const emailService = {
     /**
@@ -378,6 +402,87 @@ export const emailService = {
         });
 
         return lines.join('\n');
+    },
+
+    /**
+     * 批量生成 Hotmail/Outlook Plus 别名文本
+     */
+    async generateAliases(input: GenerateAliasInput) {
+        const {
+            ids,
+            groupId,
+            status,
+            keyword,
+            aliasCount,
+            prefix,
+            separator,
+        } = input;
+
+        const where: Prisma.EmailAccountWhereInput = {};
+        if (ids?.length) {
+            where.id = { in: ids };
+        }
+        if (groupId !== undefined) {
+            where.groupId = groupId;
+        }
+        if (status) {
+            where.status = status;
+        }
+        if (keyword) {
+            where.email = { contains: keyword };
+        }
+
+        const accounts = await prisma.emailAccount.findMany({
+            where,
+            select: {
+                id: true,
+                email: true,
+                password: true,
+                clientId: true,
+                refreshToken: true,
+            },
+            orderBy: { id: 'asc' },
+        });
+
+        const contentLines: string[] = [];
+        let eligibleCount = 0;
+        let skippedPlusAliasCount = 0;
+        let skippedUnsupportedDomainCount = 0;
+
+        for (const account of accounts) {
+            if (!isSupportedAliasEmail(account.email)) {
+                skippedUnsupportedDomainCount += 1;
+                continue;
+            }
+
+            if (hasPlusAlias(account.email)) {
+                skippedPlusAliasCount += 1;
+                continue;
+            }
+
+            eligibleCount += 1;
+            const [localPart, domain] = account.email.split('@');
+            const password = account.password ? decrypt(account.password) : '';
+            const refreshToken = decrypt(account.refreshToken);
+
+            // 中文注释：仅生成别名行，不包含原邮箱，保持与参考脚本一致。
+            for (let index = 1; index <= aliasCount; index += 1) {
+                const aliasEmail = `${localPart}+${prefix}${index}@${domain}`;
+                contentLines.push(`${aliasEmail}${separator}${password}${separator}${account.clientId}${separator}${refreshToken}`);
+            }
+        }
+
+        return {
+            content: contentLines.join('\n'),
+            stats: {
+                sourceCount: accounts.length,
+                eligibleCount,
+                aliasCountPerEmail: aliasCount,
+                generatedCount: contentLines.length,
+                skippedPlusAliasCount,
+                skippedUnsupportedDomainCount,
+            },
+        };
     },
 
     /**

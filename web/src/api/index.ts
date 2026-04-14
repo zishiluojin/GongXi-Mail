@@ -495,6 +495,35 @@ export const emailApi = {
             params: { ids: ids?.join(','), separator, groupId },
         }),
 
+    generateAliases: (data: {
+        ids?: number[];
+        groupId?: number;
+        status?: 'ACTIVE' | 'ERROR' | 'DISABLED';
+        keyword?: string;
+        aliasCount?: number;
+        prefix?: string;
+        separator?: string;
+    }) =>
+        requestPost<{
+            content: string;
+            stats: {
+                sourceCount: number;
+                eligibleCount: number;
+                aliasCountPerEmail: number;
+                generatedCount: number;
+                skippedPlusAliasCount: number;
+                skippedUnsupportedDomainCount: number;
+            };
+        }, {
+            ids?: number[];
+            groupId?: number;
+            status?: 'ACTIVE' | 'ERROR' | 'DISABLED';
+            keyword?: string;
+            aliasCount?: number;
+            prefix?: string;
+            separator?: string;
+        }>('/admin/emails/generate-aliases', data),
+
     update: (id: number, data: { email?: string; clientId?: string; refreshToken?: string; password?: string; status?: string; groupId?: number | null }) =>
         requestPut<Record<string, unknown>, { email?: string; clientId?: string; refreshToken?: string; password?: string; status?: string; groupId?: number | null }>(
             `/admin/emails/${id}`,
