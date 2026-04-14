@@ -142,7 +142,7 @@ function formatTokenRefreshError(message: string): string {
 
 function getFailureUpdateData(_existingErrorMessage: string | null, message: string) {
     return {
-        // 中文注释：Token 刷新失败后直接标记为异常，并记录失败时间与原因，便于前端筛选和批量清理。
+        // Token 刷新失败后直接标记为异常，并记录失败时间与原因，便于前端筛选和批量清理。
         status: 'ERROR' as const,
         tokenRefreshFailedAt: new Date(),
         tokenRefreshFailureReason: message.substring(0, 1000),

@@ -18,7 +18,10 @@ import {
     Spin,
     InputNumber,
     Alert,
+    Dropdown,
+    Checkbox,
 } from 'antd';
+import type { MenuProps } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
     PlusOutlined,
@@ -34,6 +37,7 @@ import {
     WarningOutlined,
     StopOutlined,
     ForkOutlined,
+    SettingOutlined,
 } from '@ant-design/icons';
 import { emailApi, groupApi } from '../../api';
 import { getErrorMessage } from '../../utils/error';
@@ -72,6 +76,7 @@ interface EmailGroup {
 interface EmailAccount {
     id: number;
     email: string;
+    fullName?: string | null;
     clientId: string;
     status: 'ACTIVE' | 'ERROR' | 'DISABLED';
     groupId: number | null;
@@ -115,6 +120,64 @@ interface AliasGenerateResult {
     };
 }
 
+type EmailTableColumnKey =
+    | 'email'
+    | 'aliasRelation'
+    | 'clientId'
+    | 'group'
+    | 'status'
+    | 'errorInfo'
+    | 'lastCheckAt'
+    | 'tokenRefreshedAt'
+    | 'createdAt'
+    | 'action';
+
+interface EmailTableColumnConfig {
+    key: EmailTableColumnKey;
+    title: string;
+    defaultVisible: boolean;
+}
+
+const EMAIL_TABLE_COLUMN_CONFIGS: EmailTableColumnConfig[] = [
+    { key: 'email', title: '邮箱名称', defaultVisible: true },
+    { key: 'aliasRelation', title: '别名关联', defaultVisible: true },
+    { key: 'clientId', title: '客户端 ID', defaultVisible: false },
+    { key: 'group', title: '分组', defaultVisible: true },
+    { key: 'status', title: '状态', defaultVisible: true },
+    { key: 'errorInfo', title: '异常信息', defaultVisible: true },
+    { key: 'lastCheckAt', title: '最后检查', defaultVisible: false },
+    { key: 'tokenRefreshedAt', title: 'Token 刷新', defaultVisible: false },
+    { key: 'createdAt', title: '创建时间', defaultVisible: false },
+    { key: 'action', title: '操作', defaultVisible: true },
+];
+
+const DEFAULT_VISIBLE_EMAIL_COLUMNS = EMAIL_TABLE_COLUMN_CONFIGS
+    .filter((column) => column.defaultVisible)
+    .map((column) => column.key);
+
+interface AliasRelationSummary {
+    type: 'PRIMARY' | 'ALIAS' | 'NORMAL';
+    primaryEmail?: string;
+    aliasCount?: number;
+}
+
+const getPrimaryEmailFromAlias = (email: string): string | null => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const atIndex = normalizedEmail.indexOf('@');
+    if (atIndex <= 0) {
+        return null;
+    }
+
+    const localPart = normalizedEmail.slice(0, atIndex);
+    const domain = normalizedEmail.slice(atIndex + 1);
+    const plusIndex = localPart.indexOf('+');
+    if (plusIndex <= 0 || !domain) {
+        return null;
+    }
+
+    return `${localPart.slice(0, plusIndex)}@${domain}`;
+};
+
 const EmailsPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState<EmailAccount[]>([]);
@@ -145,6 +208,7 @@ const EmailsPage: React.FC = () => {
     const [emailDetailContent, setEmailDetailContent] = useState<string>('');
     const [emailDetailSubject, setEmailDetailSubject] = useState<string>('');
     const [emailEditLoading, setEmailEditLoading] = useState(false);
+    const [visibleColumnKeys, setVisibleColumnKeys] = useState<EmailTableColumnKey[]>(DEFAULT_VISIBLE_EMAIL_COLUMNS);
     const [form] = Form.useForm();
     const [aliasForm] = Form.useForm();
 
@@ -289,7 +353,9 @@ const EmailsPage: React.FC = () => {
     };
 
     const handleDeleteErrorAccounts = async () => {
-        const errorIds = data.filter((item) => item.status === 'ERROR').map((item) => item.id);
+        const errorIds = data
+            .filter((item: EmailAccount) => item.status === 'ERROR')
+            .map((item: EmailAccount) => item.id);
         if (errorIds.length === 0) {
             message.warning('当前列表中没有异常账号');
             return;
@@ -505,19 +571,20 @@ const EmailsPage: React.FC = () => {
     // Token refresh handlers
     // ========================================
     const handleRefreshToken = useCallback(async (record: EmailAccount) => {
-        setRefreshingTokenIds(prev => new Set(prev).add(record.id));
+        setRefreshingTokenIds((prev: Set<number>) => new Set(prev).add(record.id));
         try {
             const res = await emailApi.refreshSingleToken(record.id);
             if (res.code === 200 && res.data?.success) {
                 message.success(`${record.email} Token 刷新成功`);
-                fetchData();
             } else {
                 message.error(res.data?.message || 'Token 刷新失败');
             }
         } catch (err: unknown) {
             message.error(getErrorMessage(err, 'Token 刷新失败'));
         } finally {
-            setRefreshingTokenIds(prev => {
+            // 无论刷新成功还是失败，都重新拉取列表，确保状态/异常时间/原因立即回显。
+            await fetchData();
+            setRefreshingTokenIds((prev: Set<number>) => {
                 const next = new Set(prev);
                 next.delete(record.id);
                 return next;
@@ -650,15 +717,85 @@ const EmailsPage: React.FC = () => {
         }
     };
 
+    const aliasRelationMap = useMemo(() => {
+        const emailSet = new Set(data.map((item: EmailAccount) => item.email.trim().toLowerCase()));
+        const aliasCountMap = new Map<string, number>();
+        const relationMap = new Map<number, AliasRelationSummary>();
+
+        data.forEach((item: EmailAccount) => {
+            const primaryEmail = getPrimaryEmailFromAlias(item.email);
+            if (primaryEmail && emailSet.has(primaryEmail)) {
+                aliasCountMap.set(primaryEmail, (aliasCountMap.get(primaryEmail) ?? 0) + 1);
+                relationMap.set(item.id, {
+                    type: 'ALIAS',
+                    primaryEmail,
+                });
+                return;
+            }
+
+            relationMap.set(item.id, {
+                type: 'NORMAL',
+            });
+        });
+
+        data.forEach((item: EmailAccount) => {
+            const normalizedEmail = item.email.trim().toLowerCase();
+            const aliasCount = aliasCountMap.get(normalizedEmail) ?? 0;
+            if (aliasCount > 0) {
+                relationMap.set(item.id, {
+                    type: 'PRIMARY',
+                    aliasCount,
+                });
+            }
+        });
+
+        return relationMap;
+    }, [data]);
+
     // ========================================
     // Email table columns
     // ========================================
-    const columns: ColumnsType<EmailAccount> = useMemo(() => [
+    const allColumns: ColumnsType<EmailAccount> = useMemo(() => [
         {
-            title: '邮箱',
+            title: '邮箱名称',
             dataIndex: 'email',
             key: 'email',
+            width: 260,
             ellipsis: true,
+            // 优先展示全名，邮箱地址作为副标题，便于用户检索与识别。
+            render: (_: string, record: EmailAccount) => (
+                <Space direction="vertical" size={0}>
+                    <Text strong>{record.fullName?.trim() || record.email}</Text>
+                    <Text type="secondary" ellipsis style={{ maxWidth: 220 }}>
+                        {record.email}
+                    </Text>
+                </Space>
+            ),
+        },
+        {
+            title: '别名关联',
+            key: 'aliasRelation',
+            width: 220,
+            // 在当前列表内自动识别 plus alias，并展示与主邮箱的归属关系。
+            render: (_: unknown, record: EmailAccount) => {
+                const relation = aliasRelationMap.get(record.id);
+                if (!relation || relation.type === 'NORMAL') {
+                    return <Text type="secondary">独立邮箱</Text>;
+                }
+
+                if (relation.type === 'ALIAS') {
+                    return (
+                        <Space direction="vertical" size={0}>
+                            <Tag color="gold">别名邮箱</Tag>
+                            <Text type="secondary" ellipsis style={{ maxWidth: 180 }}>
+                                主邮箱：{relation.primaryEmail}
+                            </Text>
+                        </Space>
+                    );
+                }
+
+                return <Tag color="cyan">主邮箱（{relation.aliasCount ?? 0} 个别名）</Tag>;
+            },
         },
         {
             title: '客户端 ID',
@@ -787,7 +924,45 @@ const EmailsPage: React.FC = () => {
                 </Space>
             ),
         },
-    ], [handleDelete, handleEdit, handleRefreshToken, handleViewMails, refreshingTokenIds]);
+    ], [aliasRelationMap, handleDelete, handleEdit, handleRefreshToken, handleViewMails, refreshingTokenIds]);
+
+    const columns = useMemo(
+        () => allColumns.filter((column: ColumnsType<EmailAccount>[number]) => visibleColumnKeys.includes(column.key as EmailTableColumnKey)),
+        [allColumns, visibleColumnKeys]
+    );
+
+    const columnSettingsMenuItems: MenuProps['items'] = useMemo(
+        () => [
+            {
+                key: 'column-settings',
+                disabled: true,
+                label: '自定义显示列',
+            },
+            {
+                key: 'column-settings-group',
+                label: (
+                    <Checkbox.Group
+                        value={visibleColumnKeys}
+                        onChange={(checkedValues: Array<string | number>) => {
+                            const nextKeys = checkedValues as EmailTableColumnKey[];
+                            const ensuredKeys = nextKeys.includes('action')
+                                ? nextKeys
+                                : [...nextKeys, 'action'];
+                            setVisibleColumnKeys(ensuredKeys);
+                        }}
+                        style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                    >
+                        {EMAIL_TABLE_COLUMN_CONFIGS.map((column) => (
+                            <Checkbox key={column.key} value={column.key} disabled={column.key === 'action'}>
+                                {column.title}
+                            </Checkbox>
+                        ))}
+                    </Checkbox.Group>
+                ),
+            },
+        ],
+        [visibleColumnKeys]
+    );
 
     const rowSelection = useMemo(
         () => ({
@@ -968,6 +1143,14 @@ const EmailsPage: React.FC = () => {
                                         />
                                     </Space>
                                     <Space wrap>
+                                        <Dropdown
+                                            trigger={['click']}
+                                            menu={{ items: columnSettingsMenuItems }}
+                                        >
+                                            <Button icon={<SettingOutlined />}>
+                                                自定义列
+                                            </Button>
+                                        </Dropdown>
                                         <Button
                                             icon={<SyncOutlined spin={batchRefreshing} />}
                                             onClick={handleBatchRefreshTokens}
@@ -1133,7 +1316,7 @@ const EmailsPage: React.FC = () => {
                                 const fileContent = e.target?.result as string;
                                 if (fileContent) {
                                     const lines = fileContent.split(/\r?\n/).filter((line: string) => line.trim());
-                                    // 中文注释：前端不再擅自裁剪列，避免把密码字段在导入前就丢掉。
+                                    // 前端不再擅自裁剪列，避免把密码字段在导入前就丢掉。
                                     const processedLines = lines.map((line: string) => line.trim());
 
                                     setImportContent(processedLines.join('\n'));

@@ -12,6 +12,8 @@ const HOTMAIL_ALIAS_DOMAINS = new Set([
     'msn.com', 'windowslive.com',
 ]);
 
+const UUID_LIKE_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function isSupportedAliasEmail(email: string): boolean {
     const normalizedEmail = email.trim().toLowerCase();
     const atIndex = normalizedEmail.lastIndexOf('@');
@@ -26,6 +28,14 @@ function isSupportedAliasEmail(email: string): boolean {
 function hasPlusAlias(email: string): boolean {
     const localPart = email.trim().split('@', 1)[0] || '';
     return localPart.includes('+');
+}
+
+function looksLikeClientId(value: string | undefined): boolean {
+    if (!value) {
+        return false;
+    }
+
+    return UUID_LIKE_REGEX.test(value.trim());
 }
 
 export const emailService = {
@@ -197,7 +207,7 @@ export const emailService = {
         const { refreshToken, password, ...rest } = input;
         const updateData: Prisma.EmailAccountUpdateInput = { ...rest };
 
-        // 中文注释：仅在前端显式传入时更新敏感字段，避免编辑其他字段时误清空原有凭据。
+        // 仅在前端显式传入时更新敏感字段，避免编辑其他字段时误清空原有凭据。
         if (refreshToken !== undefined) {
             updateData.refreshToken = encrypt(refreshToken);
         }
@@ -302,12 +312,22 @@ export const emailService = {
                 // 3. email----clientId----uuid----info----refreshToken (5列)
 
                 if (parts.length >= 5) {
-                    // 中文注释：兼容 5 列导入格式，尽可能保留第二列中的密码信息。
-                    // email----password----clientId----info----refreshToken
                     email = parts[0];
-                    password = parts[1] || undefined;
-                    clientId = parts[2];
-                    refreshToken = parts[4];
+                    refreshToken = parts[parts.length - 1];
+
+                    // 5 列历史数据存在两种来源：
+                    // 1) email----clientId----uuid----info----refreshToken
+                    // 2) email----password----clientId----info----refreshToken
+                    // 这里优先通过 clientId 的 UUID 特征做兼容判断，避免把 clientId 错读成密码。
+                    if (looksLikeClientId(parts[1]) && !looksLikeClientId(parts[2])) {
+                        clientId = parts[1];
+                    } else if (!looksLikeClientId(parts[1]) && looksLikeClientId(parts[2])) {
+                        password = parts[1] || undefined;
+                        clientId = parts[2];
+                    } else {
+                        // 默认回退到历史老格式，优先保证导入后的 clientId 正确。
+                        clientId = parts[1];
+                    }
                 } else if (parts.length === 4) {
                     // email----password----clientId----refreshToken
                     email = parts[0];
@@ -465,7 +485,7 @@ export const emailService = {
             const password = account.password ? decrypt(account.password) : '';
             const refreshToken = decrypt(account.refreshToken);
 
-            // 中文注释：仅生成别名行，不包含原邮箱，保持与参考脚本一致。
+            // 仅生成别名行，不包含原邮箱，保持与参考脚本一致。
             for (let index = 1; index <= aliasCount; index += 1) {
                 const aliasEmail = `${localPart}+${prefix}${index}@${domain}`;
                 contentLines.push(`${aliasEmail}${separator}${password}${separator}${account.clientId}${separator}${refreshToken}`);
