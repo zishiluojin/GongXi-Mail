@@ -35,6 +35,8 @@ export const emailService = {
                 group: { select: { id: true, name: true, fetchStrategy: true } },
                 lastCheckAt: true,
                 tokenRefreshedAt: true,
+                tokenRefreshFailedAt: true,
+                tokenRefreshFailureReason: true,
                 errorMessage: true,
                 createdAt: true,
             },
@@ -65,6 +67,8 @@ export const emailService = {
                 group: { select: { id: true, name: true, fetchStrategy: true } },
                 lastCheckAt: true,
                 tokenRefreshedAt: true,
+                tokenRefreshFailedAt: true,
+                tokenRefreshFailureReason: true,
                 errorMessage: true,
                 createdAt: true,
                 updatedAt: true,
@@ -169,11 +173,11 @@ export const emailService = {
         const { refreshToken, password, ...rest } = input;
         const updateData: Prisma.EmailAccountUpdateInput = { ...rest };
 
-        // 加密 sensitive data
-        if (refreshToken) {
+        // 中文注释：仅在前端显式传入时更新敏感字段，避免编辑其他字段时误清空原有凭据。
+        if (refreshToken !== undefined) {
             updateData.refreshToken = encrypt(refreshToken);
         }
-        if (password) {
+        if (password !== undefined) {
             updateData.password = encrypt(password);
         }
 
@@ -274,11 +278,12 @@ export const emailService = {
                 // 3. email----clientId----uuid----info----refreshToken (5列)
 
                 if (parts.length >= 5) {
-                    // email----clientId----uuid----info----refreshToken
+                    // 中文注释：兼容 5 列导入格式，尽可能保留第二列中的密码信息。
+                    // email----password----clientId----info----refreshToken
                     email = parts[0];
-                    clientId = parts[1];
+                    password = parts[1] || undefined;
+                    clientId = parts[2];
                     refreshToken = parts[4];
-                    // 这种格式通常没有密码，或者密码隐藏在 info 里？暂且不处理密码
                 } else if (parts.length === 4) {
                     // email----password----clientId----refreshToken
                     email = parts[0];
@@ -300,6 +305,8 @@ export const emailService = {
                     clientId,
                     refreshToken: encrypt(refreshToken),
                     status: 'ACTIVE',
+                    tokenRefreshFailedAt: null,
+                    tokenRefreshFailureReason: null,
                 };
                 if (password) data.password = encrypt(password);
                 if (groupId !== undefined) data.groupId = groupId;
@@ -319,6 +326,8 @@ export const emailService = {
                         clientId,
                         refreshToken: encrypt(refreshToken),
                         status: 'ACTIVE',
+                        tokenRefreshFailedAt: null,
+                        tokenRefreshFailureReason: null,
                     };
                     if (password) {
                         createData.password = encrypt(password);
@@ -356,14 +365,16 @@ export const emailService = {
             where,
             select: {
                 email: true,
+                password: true,
                 clientId: true,
                 refreshToken: true,
             },
         });
 
-        const lines = accounts.map((acc: { email: string; clientId: string; refreshToken: string }) => {
+        const lines = accounts.map((acc: { email: string; password: string | null; clientId: string; refreshToken: string }) => {
+            const password = acc.password ? decrypt(acc.password) : '';
             const token = decrypt(acc.refreshToken);
-            return `${acc.email}${separator}${acc.clientId}${separator}${token}`;
+            return `${acc.email}${separator}${password}${separator}${acc.clientId}${separator}${token}`;
         });
 
         return lines.join('\n');

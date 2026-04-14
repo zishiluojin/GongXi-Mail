@@ -29,6 +29,8 @@ import {
     MailOutlined,
     GroupOutlined,
     SyncOutlined,
+    WarningOutlined,
+    StopOutlined,
 } from '@ant-design/icons';
 import { emailApi, groupApi } from '../../api';
 import { getErrorMessage } from '../../utils/error';
@@ -73,6 +75,8 @@ interface EmailAccount {
     group: { id: number; name: string } | null;
     lastCheckAt: string | null;
     tokenRefreshedAt: string | null;
+    tokenRefreshFailedAt: string | null;
+    tokenRefreshFailureReason: string | null;
     errorMessage: string | null;
     createdAt: string;
 }
@@ -93,6 +97,7 @@ interface MailItem {
 
 interface EmailDetailsResult extends EmailAccount {
     refreshToken: string;
+    password?: string;
 }
 
 const EmailsPage: React.FC = () => {
@@ -109,6 +114,7 @@ const EmailsPage: React.FC = () => {
     const [keyword, setKeyword] = useState('');
     const [debouncedKeyword, setDebouncedKeyword] = useState('');
     const [filterGroupId, setFilterGroupId] = useState<number | undefined>(undefined);
+    const [filterStatus, setFilterStatus] = useState<EmailAccount['status'] | undefined>(undefined);
     const [importContent, setImportContent] = useState('');
     const [separator, setSeparator] = useState('----');
     const [importGroupId, setImportGroupId] = useState<number | undefined>(undefined);
@@ -156,8 +162,9 @@ const EmailsPage: React.FC = () => {
     const fetchData = useCallback(async () => {
         const currentRequestId = ++latestListRequestIdRef.current;
         setLoading(true);
-        const params: { page: number; pageSize: number; keyword: string; groupId?: number } = { page, pageSize, keyword: debouncedKeyword };
+        const params: { page: number; pageSize: number; keyword: string; groupId?: number; status?: EmailAccount['status'] } = { page, pageSize, keyword: debouncedKeyword };
         if (filterGroupId !== undefined) params.groupId = filterGroupId;
+        if (filterStatus !== undefined) params.status = filterStatus;
 
         const result = await requestData<EmailListResult>(
             () => emailApi.getList(params),
@@ -171,7 +178,7 @@ const EmailsPage: React.FC = () => {
             setTotal(result.total);
         }
         setLoading(false);
-    }, [debouncedKeyword, filterGroupId, page, pageSize]);
+    }, [debouncedKeyword, filterGroupId, filterStatus, page, pageSize]);
 
     useEffect(() => {
         const timer = window.setTimeout(() => {
@@ -212,6 +219,7 @@ const EmailsPage: React.FC = () => {
                 const details = res.data;
                 form.setFieldsValue({
                     email: details.email,
+                    password: details.password,
                     clientId: details.clientId,
                     refreshToken: details.refreshToken,
                     status: details.status,
@@ -255,6 +263,28 @@ const EmailsPage: React.FC = () => {
                 fetchGroups();
             } else {
                 message.error(res.message);
+            }
+        } catch (err: unknown) {
+            message.error(getErrorMessage(err, '删除失败'));
+        }
+    };
+
+    const handleDeleteErrorAccounts = async () => {
+        const errorIds = data.filter((item) => item.status === 'ERROR').map((item) => item.id);
+        if (errorIds.length === 0) {
+            message.warning('当前列表中没有异常账号');
+            return;
+        }
+
+        try {
+            const res = await emailApi.batchDelete(errorIds);
+            if (res.code === 200) {
+                message.success(`已删除 ${res.data.deleted} 个异常账号`);
+                setSelectedRowKeys([]);
+                fetchData();
+                fetchGroups();
+            } else {
+                message.error(res.message || '删除失败');
             }
         } catch (err: unknown) {
             message.error(getErrorMessage(err, '删除失败'));
@@ -585,9 +615,36 @@ const EmailsPage: React.FC = () => {
                 const labels: Record<string, string> = {
                     ACTIVE: '正常',
                     ERROR: '异常',
-                    DISABLED: '禁用',
+                    DISABLED: '停用',
                 };
-                return <Tag color={colors[status]}>{labels[status]}</Tag>;
+                return (
+                    <Tag color={colors[status]} icon={status === 'ERROR' ? <WarningOutlined /> : undefined}>
+                        {labels[status]}
+                    </Tag>
+                );
+            },
+        },
+        {
+            title: '异常信息',
+            key: 'errorInfo',
+            width: 260,
+            render: (_: unknown, record: EmailAccount) => {
+                if (record.status !== 'ERROR') {
+                    return <Text type="secondary">-</Text>;
+                }
+
+                return (
+                    <Space direction="vertical" size={0}>
+                        <Text type="danger">
+                            {record.tokenRefreshFailedAt ? dayjs(record.tokenRefreshFailedAt).format('YYYY-MM-DD HH:mm') : '时间未知'}
+                        </Text>
+                        <Tooltip title={record.tokenRefreshFailureReason || record.errorMessage || '未知原因'}>
+                            <Text type="danger" ellipsis style={{ maxWidth: 220 }}>
+                                {record.tokenRefreshFailureReason || record.errorMessage || '未知原因'}
+                            </Text>
+                        </Tooltip>
+                    </Space>
+                );
             },
         },
         {
@@ -635,7 +692,7 @@ const EmailsPage: React.FC = () => {
                     <Tooltip title="垃圾箱">
                         <Button
                             type="text"
-                            icon={<DeleteOutlined style={{ color: '#faad14' }} />}
+                            icon={<StopOutlined style={{ color: '#faad14' }} />}
                             onClick={() => handleViewMails(record, 'Junk')}
                         />
                     </Tooltip>
@@ -821,6 +878,21 @@ const EmailsPage: React.FC = () => {
                                                 setPage(1);
                                             }}
                                         />
+                                        <Select
+                                            placeholder="按状态筛选"
+                                            allowClear
+                                            style={{ width: 160 }}
+                                            value={filterStatus}
+                                            options={[
+                                                { value: 'ACTIVE', label: '正常' },
+                                                { value: 'ERROR', label: '异常' },
+                                                { value: 'DISABLED', label: '停用' },
+                                            ]}
+                                            onChange={(val: EmailAccount['status'] | undefined) => {
+                                                setFilterStatus(val);
+                                                setPage(1);
+                                            }}
+                                        />
                                     </Space>
                                     <Space wrap>
                                         <Button
@@ -836,6 +908,14 @@ const EmailsPage: React.FC = () => {
                                         <Button icon={<DownloadOutlined />} onClick={handleExport}>
                                             导出
                                         </Button>
+                                        <Popconfirm
+                                            title="确定要一键删除当前列表中的所有异常账号吗？"
+                                            onConfirm={handleDeleteErrorAccounts}
+                                        >
+                                            <Button danger icon={<WarningOutlined />}>
+                                                删除异常账号
+                                            </Button>
+                                        </Popconfirm>
                                         {selectedRowKeys.length > 0 && (
                                             <>
                                                 <Button icon={<GroupOutlined />} onClick={() => setAssignGroupModalVisible(true)}>
@@ -904,36 +984,37 @@ const EmailsPage: React.FC = () => {
             >
                 <Spin spinning={emailEditLoading}>
                     <Form form={form} layout="vertical">
-                    <Form.Item name="email" label="邮箱地址" rules={[{ required: true, message: '请输入邮箱地址' }, { type: 'email', message: '请输入有效的邮箱地址' }]}>
-                        <Input placeholder="example@outlook.com" />
-                    </Form.Item>
-                    <Form.Item name="password" label="密码">
-                        <Input.Password placeholder="可选" />
-                    </Form.Item>
+                        <Form.Item name="email" label="邮箱地址" rules={[{ required: true, message: '请输入邮箱地址' }, { type: 'email', message: '请输入有效的邮箱地址' }]}>
+                            <Input placeholder="example@outlook.com" />
+                        </Form.Item>
+                        <Form.Item name="password" label="密码">
+                            <Input.Password placeholder="可选" />
+                        </Form.Item>
 
-                    <Form.Item
-                        name="clientId"
-                        label="客户端 ID"
-                        rules={[{ required: true, message: '请输入客户端 ID' }]}
-                    >
-                        <Input placeholder="Azure AD 应用程序 ID" />
-                    </Form.Item>
-                    <Form.Item
-                        name="refreshToken"
-                        label="刷新令牌"
-                        rules={[{ required: !editingId, message: '请输入刷新令牌' }]}
-                    >
-                        <TextArea rows={4} placeholder="OAuth2 Refresh Token" />
-                    </Form.Item>
-                    <Form.Item name="groupId" label="所属分组">
-                        <Select placeholder="可选：选择分组" allowClear options={groupOptions} />
-                    </Form.Item>
-                    <Form.Item name="status" label="状态" initialValue="ACTIVE">
-                        <Select>
-                            <Select.Option value="ACTIVE">正常</Select.Option>
-                            <Select.Option value="DISABLED">禁用</Select.Option>
-                        </Select>
-                    </Form.Item>
+                        <Form.Item
+                            name="clientId"
+                            label="客户端 ID"
+                            rules={[{ required: true, message: '请输入客户端 ID' }]}
+                        >
+                            <Input placeholder="Azure AD 应用程序 ID" />
+                        </Form.Item>
+                        <Form.Item
+                            name="refreshToken"
+                            label="刷新令牌"
+                            rules={[{ required: !editingId, message: '请输入刷新令牌' }]}
+                        >
+                            <TextArea rows={4} placeholder="OAuth2 Refresh Token" />
+                        </Form.Item>
+                        <Form.Item name="groupId" label="所属分组">
+                            <Select placeholder="可选：选择分组" allowClear options={groupOptions} />
+                        </Form.Item>
+                        <Form.Item name="status" label="状态" initialValue="ACTIVE">
+                            <Select>
+                                <Select.Option value="ACTIVE">正常</Select.Option>
+                                <Select.Option value="ERROR">异常</Select.Option>
+                                <Select.Option value="DISABLED">停用</Select.Option>
+                            </Select>
+                        </Form.Item>
                     </Form>
                 </Spin>
             </Modal>
@@ -976,13 +1057,8 @@ const EmailsPage: React.FC = () => {
                                 const fileContent = e.target?.result as string;
                                 if (fileContent) {
                                     const lines = fileContent.split(/\r?\n/).filter((line: string) => line.trim());
-                                    const processedLines = lines.map((line: string) => {
-                                        const parts = line.split(separator);
-                                        if (parts.length >= 5) {
-                                            return `${parts[0]}${separator}${parts[1]}${separator}${parts[4]}`;
-                                        }
-                                        return line;
-                                    });
+                                    // 中文注释：前端不再擅自裁剪列，避免把密码字段在导入前就丢掉。
+                                    const processedLines = lines.map((line: string) => line.trim());
 
                                     setImportContent(processedLines.join('\n'));
                                     message.success(`文件读取成功，已解析 ${lines.length} 行数据`);

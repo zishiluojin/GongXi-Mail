@@ -140,22 +140,23 @@ function formatTokenRefreshError(message: string): string {
     return `${TOKEN_REFRESH_ERROR_PREFIX}: ${message}`.substring(0, 500);
 }
 
-function getFailureUpdateData(existingErrorMessage: string | null, message: string) {
-    if (existingErrorMessage && !existingErrorMessage.startsWith(TOKEN_REFRESH_ERROR_PREFIX)) {
-        return {};
-    }
-
+function getFailureUpdateData(_existingErrorMessage: string | null, message: string) {
     return {
+        // 中文注释：Token 刷新失败后直接标记为异常，并记录失败时间与原因，便于前端筛选和批量清理。
+        status: 'ERROR' as const,
+        tokenRefreshFailedAt: new Date(),
+        tokenRefreshFailureReason: message.substring(0, 1000),
         errorMessage: formatTokenRefreshError(message),
     };
 }
 
 function getSuccessUpdateData(existingErrorMessage: string | null) {
-    if (existingErrorMessage?.startsWith(TOKEN_REFRESH_ERROR_PREFIX)) {
-        return { errorMessage: null };
-    }
-
-    return {};
+    return {
+        status: 'ACTIVE' as const,
+        tokenRefreshFailedAt: null,
+        tokenRefreshFailureReason: null,
+        errorMessage: existingErrorMessage?.startsWith(TOKEN_REFRESH_ERROR_PREFIX) ? null : existingErrorMessage,
+    };
 }
 
 function mapSystemConfigToTokenRefreshConfig(config: SystemConfigSnapshot): TokenRefreshConfig {
@@ -403,6 +404,8 @@ export const tokenRefreshService = {
                 data: {
                     refreshToken: encryptedNewToken,
                     tokenRefreshedAt: new Date(),
+                    tokenRefreshFailedAt: null,
+                    tokenRefreshFailureReason: null,
                     ...getSuccessUpdateData(account.errorMessage),
                 },
             });
