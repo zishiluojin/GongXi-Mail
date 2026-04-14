@@ -87,6 +87,7 @@ interface EmailAccount {
     tokenRefreshFailureReason: string | null;
     errorMessage: string | null;
     createdAt: string;
+    aliasRelation?: AliasRelationSummary;
 }
 
 interface EmailListResult {
@@ -718,6 +719,13 @@ const EmailsPage: React.FC = () => {
     };
 
     const aliasRelationMap = useMemo(() => {
+        const hasServerRelation = data.some((item: EmailAccount) => item.aliasRelation);
+        if (hasServerRelation) {
+            return new Map<number, AliasRelationSummary>(
+                data.map((item: EmailAccount) => [item.id, item.aliasRelation ?? { type: 'NORMAL' }])
+            );
+        }
+
         const emailSet = new Set(data.map((item: EmailAccount) => item.email.trim().toLowerCase()));
         const aliasCountMap = new Map<string, number>();
         const relationMap = new Map<number, AliasRelationSummary>();

@@ -14,8 +14,68 @@ const HOTMAIL_ALIAS_DOMAINS = new Set([
 
 const UUID_LIKE_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+interface AliasRelationSummary {
+    type: 'PRIMARY' | 'ALIAS' | 'NORMAL';
+    primaryEmail?: string;
+    aliasCount?: number;
+}
+
+function normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
+}
+
+function getPrimaryEmailFromAlias(email: string): string | null {
+    const normalizedEmail = normalizeEmail(email);
+    const atIndex = normalizedEmail.indexOf('@');
+    if (atIndex <= 0) {
+        return null;
+    }
+
+    const localPart = normalizedEmail.slice(0, atIndex);
+    const domain = normalizedEmail.slice(atIndex + 1);
+    const plusIndex = localPart.indexOf('+');
+    if (plusIndex <= 0 || !domain) {
+        return null;
+    }
+
+    return `${localPart.slice(0, plusIndex)}@${domain}`;
+}
+
+function buildAliasRelationMap(accounts: Array<{ id: number; email: string }>): Map<number, AliasRelationSummary> {
+    const emailSet = new Set(accounts.map((item) => normalizeEmail(item.email)));
+    const aliasCountMap = new Map<string, number>();
+    const relationMap = new Map<number, AliasRelationSummary>();
+
+    accounts.forEach((item) => {
+        const primaryEmail = getPrimaryEmailFromAlias(item.email);
+        if (primaryEmail && emailSet.has(primaryEmail)) {
+            aliasCountMap.set(primaryEmail, (aliasCountMap.get(primaryEmail) ?? 0) + 1);
+            relationMap.set(item.id, {
+                type: 'ALIAS',
+                primaryEmail,
+            });
+            return;
+        }
+
+        relationMap.set(item.id, { type: 'NORMAL' });
+    });
+
+    accounts.forEach((item) => {
+        const normalizedEmail = normalizeEmail(item.email);
+        const aliasCount = aliasCountMap.get(normalizedEmail) ?? 0;
+        if (aliasCount > 0) {
+            relationMap.set(item.id, {
+                type: 'PRIMARY',
+                aliasCount,
+            });
+        }
+    });
+
+    return relationMap;
+}
+
 function isSupportedAliasEmail(email: string): boolean {
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
     const atIndex = normalizedEmail.lastIndexOf('@');
     if (atIndex <= 0) {
         return false;
@@ -57,7 +117,14 @@ export const emailService = {
             where.group = { name: groupName };
         }
 
-        const [list, total] = await Promise.all([
+        const aliasRelationWhere: Prisma.EmailAccountWhereInput = {};
+        if (groupId) {
+            aliasRelationWhere.groupId = groupId;
+        } else if (groupName) {
+            aliasRelationWhere.group = { name: groupName };
+        }
+
+        const [list, total, relationSourceAccounts] = await Promise.all([
             prisma.emailAccount.findMany({
                 where,
                 select: {
@@ -79,9 +146,24 @@ export const emailService = {
                 orderBy: { id: 'desc' },
             }),
             prisma.emailAccount.count({ where }),
+            prisma.emailAccount.findMany({
+                where: aliasRelationWhere,
+                select: {
+                    id: true,
+                    email: true,
+                },
+            }),
         ]);
 
-        return { list, total, page, pageSize };
+        // 别名关联按“同一分组范围内的完整邮箱集合”计算，不再受分页、关键字、状态筛选影响，
+        // 避免主邮箱或别名被临时筛出列表后，前端出现关联忽有忽无的问题。
+        const aliasRelationMap = buildAliasRelationMap(relationSourceAccounts);
+        const enrichedList = list.map((item: (typeof list)[number]) => ({
+            ...item,
+            aliasRelation: aliasRelationMap.get(item.id) ?? { type: 'NORMAL' as const },
+        }));
+
+        return { list: enrichedList, total, page, pageSize };
     },
 
     /**
