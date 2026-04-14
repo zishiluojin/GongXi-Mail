@@ -466,7 +466,7 @@ export const apiKeyApi = {
 // ========================================
 
 export const emailApi = {
-    getList: <T = Record<string, unknown>>(params?: { page?: number; pageSize?: number; status?: string; keyword?: string; groupId?: number }) =>
+    getList: <T = Record<string, unknown>>(params?: { page?: number; pageSize?: number; status?: string; keyword?: string; groupId?: number; aliasType?: 'PRIMARY' | 'ALIAS' | 'NORMAL' }) =>
         requestGet<ApiPagedList<T>>('/admin/emails', { params, cacheMs: 800 }),
 
     getById: <T = Record<string, unknown>>(id: number, includeSecrets?: boolean) =>

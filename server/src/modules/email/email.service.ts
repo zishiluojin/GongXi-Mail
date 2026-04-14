@@ -103,7 +103,7 @@ export const emailService = {
      * 获取邮箱列表
      */
     async list(input: ListEmailInput) {
-        const { page, pageSize, status, keyword, groupId, groupName } = input;
+        const { page, pageSize, status, keyword, groupId, groupName, aliasType } = input;
         const skip = (page - 1) * pageSize;
 
         const where: Prisma.EmailAccountWhereInput = {};
@@ -124,28 +124,25 @@ export const emailService = {
             aliasRelationWhere.group = { name: groupName };
         }
 
-        const [list, total, relationSourceAccounts] = await Promise.all([
+        const [baseList, relationSourceAccounts] = await Promise.all([
             prisma.emailAccount.findMany({
                 where,
                 select: {
                     id: true,
                     email: true,
                     clientId: true,
-                status: true,
-                groupId: true,
-                group: { select: { id: true, name: true, fetchStrategy: true } },
-                lastCheckAt: true,
-                tokenRefreshedAt: true,
-                tokenRefreshFailedAt: true,
-                tokenRefreshFailureReason: true,
-                errorMessage: true,
-                createdAt: true,
-            },
-                skip,
-                take: pageSize,
+                    status: true,
+                    groupId: true,
+                    group: { select: { id: true, name: true, fetchStrategy: true } },
+                    lastCheckAt: true,
+                    tokenRefreshedAt: true,
+                    tokenRefreshFailedAt: true,
+                    tokenRefreshFailureReason: true,
+                    errorMessage: true,
+                    createdAt: true,
+                },
                 orderBy: { id: 'desc' },
             }),
-            prisma.emailAccount.count({ where }),
             prisma.emailAccount.findMany({
                 where: aliasRelationWhere,
                 select: {
@@ -158,12 +155,19 @@ export const emailService = {
         // 别名关联按“同一分组范围内的完整邮箱集合”计算，不再受分页、关键字、状态筛选影响，
         // 避免主邮箱或别名被临时筛出列表后，前端出现关联忽有忽无的问题。
         const aliasRelationMap = buildAliasRelationMap(relationSourceAccounts);
-        const enrichedList = list.map((item: (typeof list)[number]) => ({
+        const enrichedList = baseList.map((item: (typeof baseList)[number]) => ({
             ...item,
             aliasRelation: aliasRelationMap.get(item.id) ?? { type: 'NORMAL' as const },
         }));
 
-        return { list: enrichedList, total, page, pageSize };
+        const filteredList = aliasType
+            ? enrichedList.filter((item) => item.aliasRelation.type === aliasType)
+            : enrichedList;
+
+        const total = filteredList.length;
+        const list = filteredList.slice(skip, skip + pageSize);
+
+        return { list, total, page, pageSize };
     },
 
     /**

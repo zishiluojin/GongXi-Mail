@@ -23,6 +23,7 @@ export const listEmailSchema = z.object({
     status: z.enum(['ACTIVE', 'ERROR', 'DISABLED']).optional(),
     keyword: z.string().optional(),
     groupId: z.coerce.number().int().positive().optional(),
+    aliasType: z.enum(['PRIMARY', 'ALIAS', 'NORMAL']).optional(),
     groupName: z.string().optional(),
 });
 

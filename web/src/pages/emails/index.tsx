@@ -162,6 +162,8 @@ interface AliasRelationSummary {
     aliasCount?: number;
 }
 
+type AliasRelationFilter = AliasRelationSummary['type'];
+
 const getPrimaryEmailFromAlias = (email: string): string | null => {
     const normalizedEmail = email.trim().toLowerCase();
     const atIndex = normalizedEmail.indexOf('@');
@@ -195,6 +197,7 @@ const EmailsPage: React.FC = () => {
     const [debouncedKeyword, setDebouncedKeyword] = useState('');
     const [filterGroupId, setFilterGroupId] = useState<number | undefined>(undefined);
     const [filterStatus, setFilterStatus] = useState<EmailAccount['status'] | undefined>(undefined);
+    const [filterAliasType, setFilterAliasType] = useState<AliasRelationFilter | undefined>(undefined);
     const [importContent, setImportContent] = useState('');
     const [separator, setSeparator] = useState('----');
     const [importGroupId, setImportGroupId] = useState<number | undefined>(undefined);
@@ -246,9 +249,17 @@ const EmailsPage: React.FC = () => {
     const fetchData = useCallback(async () => {
         const currentRequestId = ++latestListRequestIdRef.current;
         setLoading(true);
-        const params: { page: number; pageSize: number; keyword: string; groupId?: number; status?: EmailAccount['status'] } = { page, pageSize, keyword: debouncedKeyword };
+        const params: {
+            page: number;
+            pageSize: number;
+            keyword: string;
+            groupId?: number;
+            status?: EmailAccount['status'];
+            aliasType?: AliasRelationFilter;
+        } = { page, pageSize, keyword: debouncedKeyword };
         if (filterGroupId !== undefined) params.groupId = filterGroupId;
         if (filterStatus !== undefined) params.status = filterStatus;
+        if (filterAliasType !== undefined) params.aliasType = filterAliasType;
 
         const result = await requestData<EmailListResult>(
             () => emailApi.getList(params),
@@ -262,7 +273,7 @@ const EmailsPage: React.FC = () => {
             setTotal(result.total);
         }
         setLoading(false);
-    }, [debouncedKeyword, filterGroupId, filterStatus, page, pageSize]);
+    }, [debouncedKeyword, filterAliasType, filterGroupId, filterStatus, page, pageSize]);
 
     useEffect(() => {
         const timer = window.setTimeout(() => {
@@ -1152,6 +1163,21 @@ const EmailsPage: React.FC = () => {
                                             ]}
                                             onChange={(val: EmailAccount['status'] | undefined) => {
                                                 setFilterStatus(val);
+                                                setPage(1);
+                                            }}
+                                        />
+                                        <Select
+                                            placeholder="按别名类型筛选"
+                                            allowClear
+                                            style={{ width: 180 }}
+                                            value={filterAliasType}
+                                            options={[
+                                                { value: 'PRIMARY', label: '主邮箱' },
+                                                { value: 'ALIAS', label: '别名邮箱' },
+                                                { value: 'NORMAL', label: '独立邮箱' },
+                                            ]}
+                                            onChange={(val: AliasRelationFilter | undefined) => {
+                                                setFilterAliasType(val);
                                                 setPage(1);
                                             }}
                                         />
